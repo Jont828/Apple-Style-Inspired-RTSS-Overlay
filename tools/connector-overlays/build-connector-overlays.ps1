@@ -6,7 +6,7 @@ Builds the 12V connector variants of Volt Sleek Meters Universal from an install
 Reads a Volt Sleek Meters Universal .ovl and its atlas (by default the Smoke theme from the RTSS
 Overlays folder) and writes these copies, each with its own atlas:
 
-  volt_sleek_meters_universal_12v_conn_smoke      "12V CONNECTOR" title over the connector temp, metered stats
+  volt_sleek_meters_universal_12v_conn_smoke      "12V-2x6" title over the connector temp, metered stats
   volt_sleek_meters_universal_12v_conn_bar_smoke  FPS-style: big connector temp, headroom bar, metered stats
   volt_sleek_meters_universal_12v_conn_ring_smoke CPU/GPU-style: headroom ring, title over temp, metered stats
 
@@ -15,10 +15,11 @@ Each section sits left of FPS and replaces the 12V section; the 12V voltage beco
 
 (volt_sleek_meters_universal_conn_smoke, the CONN section to the right of 12V, is not generated here.)
 
-Like the CONN layout, each atlas is a copy of the source atlas with the panel strip rebuilt. The unused
-64 px 12V meter frames are replaced by a green 30-frame ring, and green 104 px meter frames go in the
-empty space right of the last CPU ring row, so the atlas keeps its standard size. Panels wider than the
-atlas are drawn as two image layers (see Get-PanelHead).
+Like the CONN layout, each atlas is a copy of the source atlas with the panel strip rebuilt. The 64 px 12V
+meter frames move (as 6 px tall frames) to the empty space right of the last GPU ring row, and their old
+place holds a green 30-frame ring; green 104 px meter frames go in the empty space right of the last CPU
+ring row, so the atlas keeps its standard size. Panels wider than the atlas are drawn as two image layers
+(see Get-PanelHead).
 
 The atlases use short "volt_smu_*" names: OverlayEditor passes "Plugins\Client\Overlays\<atlas>" to RTSS, and
 at 76+ characters RTSS no longer loads the image and draws font glyphs instead of the panel.
@@ -52,18 +53,21 @@ $AtlasW = 1024; $PanelTailX = 600   # tail of a split panel starts at this strip
 $FpsTail = 168   # panel width right of the FPS section start (FPS plus right padding)
 $Green = [System.Drawing.Color]::FromArgb(0x30, 0xD1, 0x58)   # 12V / FPS green
 $Blue = [System.Drawing.Color]::FromArgb(0x0A, 0x84, 0xFF)    # CPU ring / meter blue
-$Title = '12V CONNECTOR'
-$TitleW = 116    # "12V CONNECTOR" is ~113 px at Size=66
+$Title = '12V-2x6'
+$TitleW = 60     # same title column as CPU/GPU; "12V-2x6" is ~55 px at Size=66
 
 # Source atlas frames that the connector frames are recoloured from.
 $SrcRingY = 94; $SrcRingSize = 67; $SrcRingCols = 15; $SrcRingFrames = 51
 $SrcMeterY = 634; $SrcMeterW = 104; $SrcMeterH = 32; $SrcMeterCols = 9; $SrcMeterFrames = 51
-$Old12VMeterY = 995   # 64 px 12V meter frames (y 1022-1150), unused by these layouts; cleared from here down
-# Generated green frames.
+$Src12VMeterY = 1022; $Src12VMeterW = 64; $Src12VMeterCols = 16   # 64 px 12V meter frames (51, 32 px tall)
+$Old12VMeterY = 995   # the 12V meter frames are moved, then cleared from here down
+# Generated frames.
 $RingY = 996; $RingFrames = 30
 $MeterX = 402; $MeterY = 295; $MeterH = 6; $MeterCols = 5   # bar line is the top 6 px of a meter frame
+$ShortMeterX = 402; $ShortMeterY = 565; $ShortMeterCols = 9
 $ConnRing = "0,$RingY,$SrcRingSize,$SrcRingSize,$RingFrames,$SrcRingCols,0"
 $ConnMeter = "$MeterX,$MeterY,$SrcMeterW,$MeterH,$SrcMeterFrames,$MeterCols,0"
+$ConnShortMeter = "$ShortMeterX,$ShortMeterY,$Src12VMeterW,$MeterH,$SrcMeterFrames,$ShortMeterCols,0"
 
 function Read-Ovl([string]$path) {
     $sections = New-Object System.Collections.ArrayList
@@ -223,8 +227,13 @@ function Copy-GreenFrame($bmp, [int]$sx, [int]$sy, [int]$dx, [int]$dy, [int]$w, 
     }
 }
 
-# Replaces the unused 64 px 12V meter frames with a green ring and adds green 104 px meter frames.
+# Moves the 64 px 12V meter frames, puts a green ring in their place and adds green 104 px meter frames.
 function Add-ConnectorFrames($bmp) {
+    for ($i = 0; $i -lt $SrcMeterFrames; $i++) {
+        $sx = ($i % $Src12VMeterCols) * $Src12VMeterW; $sy = $Src12VMeterY + [Math]::Floor($i / $Src12VMeterCols) * $SrcMeterH
+        $dx = $ShortMeterX + ($i % $ShortMeterCols) * $Src12VMeterW; $dy = $ShortMeterY + [Math]::Floor($i / $ShortMeterCols) * $MeterH
+        for ($y = 0; $y -lt $MeterH; $y++) { for ($x = 0; $x -lt $Src12VMeterW; $x++) { $bmp.SetPixel($dx + $x, $dy + $y, $bmp.GetPixel($sx + $x, $sy + $y)) } }
+    }
     for ($y = $Old12VMeterY; $y -lt $bmp.Height; $y++) {
         for ($x = 0; $x -lt $bmp.Width; $x++) { $bmp.SetPixel($x, $y, [System.Drawing.Color]::Transparent) }
     }
@@ -272,8 +281,9 @@ function Add-TitleColumn($ovl, [int]$x, [string]$color) {
     [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" ($x + 3) 56 $TitleW 32 4 150 $ConnHeatColor))
 }
 
-$Gap = 18          # title column to stats
-$ConnStart = 610   # panel-local start of the connector section (after the GPU divider)
+$Gap = 29          # title column to stats, as for CPU/GPU
+$ConnStart = 607   # panel-local start of the connector section (13 px after the GPU divider, as for CPU/GPU)
+$FpsGap = 84       # big value to stats, as for FPS
 
 # 1) Title over the connector temp, metered stats on the right.
 New-Variant '12v_conn' '12V Conn' {
@@ -285,19 +295,19 @@ New-Variant '12v_conn' '12V Conn' {
     Add-Rows $ovl ($x + $TitleW + $Gap)
 }
 
-# 2) FPS-style: big connector temp with a headroom meter underneath, metered stats on the right.
+# 2) FPS-style: big connector temp with a 12V-sized headroom meter underneath, metered stats on the right.
 New-Variant '12v_conn_bar' '12V Conn Bar' {
     param($ovl, $png)
     Add-ConnectorSources $ovl
     $color = Remove-12V $ovl
-    $x = Set-Section $ovl $png $ConnStart ($TitleW + $Gap + $SrcMeterW)
+    $x = Set-Section $ovl $png $ConnStart ($FpsGap + $SrcMeterW)
     [void]$ovl.Layers.Add((New-Layer 'Conn title' $Title $x 36 0 0 0 66 $color))
     [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" $x 49 0 0 0 170 $ConnHeatColor))
-    [void]$ovl.Layers.Add((New-Layer 'Conn meter' "<AI=Conn pct,0,0,0,102,$ConnMeter>" $x 98 $SrcMeterW $MeterH 0))
-    Add-Rows $ovl ($x + $TitleW + $Gap)
+    [void]$ovl.Layers.Add((New-Layer 'Conn meter' "<AI=Conn pct,0,0,0,102,$ConnShortMeter>" $x 98 $Src12VMeterW $MeterH 0))
+    Add-Rows $ovl ($x + $FpsGap)
 }
 
-# 3) CPU/GPU-style: headroom ring with the % inside, title over temp, metered stats on the right.
+# 3) CPU/GPU-style: headroom ring, title over temp, metered stats on the right.
 New-Variant '12v_conn_ring' '12V Conn Ring' {
     param($ovl, $png)
     Add-ConnectorSources $ovl
@@ -305,7 +315,6 @@ New-Variant '12v_conn_ring' '12V Conn Ring' {
     $col = $SrcRingSize + 11
     $x = Set-Section $ovl $png $ConnStart ($col + $TitleW + $Gap + $SrcMeterW)
     [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn pct,0,0,0,102,$ConnRing>" $x 37 $SrcRingSize $SrcRingSize 0))
-    [void]$ovl.Layers.Add((New-Layer 'Conn pct' '%Conn pct%' $x 37 $SrcRingSize $SrcRingSize 4 86 'FFFFFF'))
     Add-TitleColumn $ovl ($x + $col) $color
     Add-Rows $ovl ($x + $col + $TitleW + $Gap)
 }

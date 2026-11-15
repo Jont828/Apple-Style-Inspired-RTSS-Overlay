@@ -14,14 +14,20 @@
 //           The fractional byte holds decimal digits (e.g. 5 -> .5, 12 -> .12, 125 -> .125).
 //   cmd 2 = product info, payload: [type, subtype, fw_major, fw_minor]
 //   cmd 5 = serial (ASCII, 12 bytes)
+//
+// The warning and shutdown temperatures configured in L-Connect 3 are read from its settings
+// (gzipped JSON, Type "EdgeHubAdvancedWarningDisplay", under %ProgramData%\Lian-Li\L-Connect 3\device)
+// and published as Temp3/Temp4 so overlays can scale and colour the connector temperature.
 
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
@@ -47,6 +53,8 @@ namespace EdgeHubBridge
         // Registry order (Temp0..Temp2). HWiNFO only discovers custom sensors at startup, so the layout is
         // fixed and keys are never deleted while running; unavailable readings are published as 0.
         private static readonly int[] PublishOrder = { 1, 2, 0 };
+        private const string WarningName = "Connector Warning Limit";   // Temp3
+        private const string ShutdownName = "Connector Shutdown Limit"; // Temp4
 
         private static int Main(string[] args)
         {
@@ -87,6 +95,9 @@ namespace EdgeHubBridge
                     byte[] serial = hub.Request(5);
                     if (serial != null)
                         Console.WriteLine("Serial : " + Encoding.ASCII.GetString(serial, 0, Math.Min(12, serial.Length)).Trim('\0', ' '));
+                    Limits.Serial = hub.ReadSerial();
+                    var limits = Limits.Get(opts);
+                    Console.WriteLine(string.Format(CultureInfo.InvariantCulture, "Limits : warning {0} C, shutdown {1} C ({2})", limits.Warning, limits.Shutdown, limits.Source));
                     byte[] payload = hub.Request(1);
                     if (payload == null) { Console.Error.WriteLine("No temperature response from hub."); return 1; }
                     Console.WriteLine("Raw    : " + BitConverter.ToString(payload));
@@ -129,7 +140,10 @@ namespace EdgeHubBridge
                         if (hub == null)
                         {
                             hub = EdgeHub.Open(Vid, Pid);
-                            Log(opts, "Connected: " + hub.DevicePath);
+                            Limits.Serial = hub.ReadSerial();
+                            Log(opts, "Connected: " + hub.DevicePath + (Limits.Serial != null ? " (serial " + Limits.Serial + ")" : ""));
+                            var limits = Limits.Get(opts);
+                            Log(opts, string.Format(CultureInfo.InvariantCulture, "Limits: warning {0} C, shutdown {1} C ({2})", limits.Warning, limits.Shutdown, limits.Source));
                         }
                         byte[] payload = hub.Request(1);
                         if (payload == null) throw new IOException("no temperature response");
@@ -194,13 +208,22 @@ namespace EdgeHubBridge
                 {
                     int index = PublishOrder[slot];
                     double? celsius = readings != null ? readings[index].Celsius : null;
-                    using (var k = sensor.CreateSubKey("Temp" + slot))
-                    {
-                        k.SetValue("Name", SensorNames[index], RegistryValueKind.String);
-                        string value = celsius.HasValue ? celsius.Value.ToString("0.0##", CultureInfo.InvariantCulture) : "0";
-                        k.SetValue("Value", value, RegistryValueKind.String);
-                    }
+                    WriteTemp(sensor, slot, SensorNames[index], celsius);
                 }
+                // Limits are configuration, not readings, so they stay published even when the hub is unavailable.
+                var limits = Limits.Get(opts);
+                WriteTemp(sensor, PublishOrder.Length, WarningName, limits.Warning);
+                WriteTemp(sensor, PublishOrder.Length + 1, ShutdownName, limits.Shutdown);
+            }
+        }
+
+        private static void WriteTemp(RegistryKey sensor, int slot, string name, double? celsius)
+        {
+            using (var k = sensor.CreateSubKey("Temp" + slot))
+            {
+                k.SetValue("Name", name, RegistryValueKind.String);
+                string value = celsius.HasValue ? celsius.Value.ToString("0.0##", CultureInfo.InvariantCulture) : "0";
+                k.SetValue("Value", value, RegistryValueKind.String);
             }
         }
 
@@ -231,8 +254,78 @@ Usage: EdgeHubBridge.exe [options]
   --no-registry         Do not write to the registry (with --once)
   --remove              Delete the HWiNFO custom sensor from the registry and exit
   --log <file>          Append log lines to a file
+  --warning-temp <C>    Override the warning limit (default: L-Connect 3 setting, else 60)
+  --shutdown-temp <C>   Override the shutdown limit (default: L-Connect 3 setting, else 70)
   --verbose             Log every reading
   --dump                With --once, print every raw HID input report received");
+        }
+    }
+
+    /// <summary>Warning/shutdown limits configured in L-Connect 3, re-read at most every 10 seconds.</summary>
+    internal sealed class Limits
+    {
+        public const double DefaultWarning = 60, DefaultShutdown = 70;
+        public double Warning, Shutdown;
+        public string Source;
+
+        public static string Serial;
+        private static Limits _cached;
+        private static DateTime _readAt = DateTime.MinValue;
+
+        public static Limits Get(Options opts)
+        {
+            if (_cached == null || (DateTime.UtcNow - _readAt).TotalSeconds >= 10)
+            {
+                _cached = ReadLConnect(Serial) ?? new Limits { Warning = DefaultWarning, Shutdown = DefaultShutdown, Source = "defaults" };
+                _readAt = DateTime.UtcNow;
+            }
+            var result = new Limits { Warning = _cached.Warning, Shutdown = _cached.Shutdown, Source = _cached.Source };
+            if (opts.WarningOverride.HasValue) { result.Warning = opts.WarningOverride.Value; result.Source = "override"; }
+            if (opts.ShutdownOverride.HasValue) { result.Shutdown = opts.ShutdownOverride.Value; result.Source = "override"; }
+            return result;
+        }
+
+        private static Limits ReadLConnect(string serial)
+        {
+            try
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), @"Lian-Li\L-Connect 3\device");
+                if (!Directory.Exists(dir)) return null;
+                Limits fallback = null;
+                foreach (string file in Directory.GetFiles(dir, "*.0", SearchOption.AllDirectories))
+                {
+                    if (new FileInfo(file).Length > 64 * 1024) continue;
+                    string json = ReadMaybeGzip(file);
+                    if (json == null || json.IndexOf("\"EdgeHubAdvancedWarningDisplay\"", StringComparison.Ordinal) < 0) continue;
+                    double warning, shutdown;
+                    if (!TryNumber(json, "WarningTemperatureCelsius", out warning) || !TryNumber(json, "ShutdownTemperatureCelsius", out shutdown)) continue;
+                    var limits = new Limits { Warning = warning, Shutdown = shutdown, Source = "L-Connect 3" };
+                    var id = Regex.Match(json, "\"DeviceID\"\\s*:\\s*\"([^\"]*)\"");
+                    if (serial == null || (id.Success && id.Groups[1].Value == serial)) return limits;
+                    if (fallback == null) fallback = limits;
+                }
+                return fallback;
+            }
+            catch (Exception) { return null; }
+        }
+
+        private static string ReadMaybeGzip(string file)
+        {
+            byte[] bytes = File.ReadAllBytes(file);
+            if (bytes.Length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B)
+            {
+                using (var gz = new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress))
+                using (var reader = new StreamReader(gz, Encoding.UTF8))
+                    return reader.ReadToEnd();
+            }
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        private static bool TryNumber(string json, string key, out double value)
+        {
+            value = 0;
+            var m = Regex.Match(json, "\"" + key + "\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)");
+            return m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && value > 0;
         }
     }
 
@@ -242,6 +335,7 @@ Usage: EdgeHubBridge.exe [options]
         public int IntervalMs = 1000;
         public string SensorName = "Lian Li Edge Hub";
         public string LogFile;
+        public double? WarningOverride, ShutdownOverride;
 
         public static Options Parse(string[] args)
         {
@@ -267,6 +361,13 @@ Usage: EdgeHubBridge.exe [options]
                     case "--log":
                         if (++i >= args.Length) return null;
                         o.LogFile = args[i];
+                        break;
+                    case "--warning-temp":
+                    case "--shutdown-temp":
+                        double t;
+                        string flag = args[i].ToLowerInvariant();
+                        if (++i >= args.Length || !double.TryParse(args[i], NumberStyles.Float, CultureInfo.InvariantCulture, out t) || t <= 0 || t > 150) return null;
+                        if (flag == "--warning-temp") o.WarningOverride = t; else o.ShutdownOverride = t;
                         break;
                     default: return null;
                 }
@@ -345,6 +446,15 @@ Usage: EdgeHubBridge.exe [options]
                     _responses.TryAdd(copy);
                 }
             }
+        }
+
+        /// <summary>Returns the hub's ASCII serial number, or null if it can't be read.</summary>
+        public string ReadSerial()
+        {
+            byte[] serial = Request(5);
+            if (serial == null) return null;
+            string text = Encoding.ASCII.GetString(serial, 0, Math.Min(12, serial.Length)).Trim('\0', ' ');
+            return text.Length > 0 ? text : null;
         }
 
         /// <summary>Sends a read-only request and returns the response payload, or null on timeout.</summary>

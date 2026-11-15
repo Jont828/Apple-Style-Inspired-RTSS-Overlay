@@ -12,8 +12,12 @@ reverse-engineered by [sgtaziz/lian-li-linux](https://github.com/sgtaziz/lian-li
 | `GPU 1 Connector` (Temp0) | probe on GPU connector 1 |
 | `Hub Ambient` (Temp1) | sensor on the hub |
 | `GPU 2 Connector` (Temp2) | probe on GPU connector 2 |
+| `Connector Warning Limit` (Temp3) | warning temperature set in L-Connect 3 (default 60) |
+| `Connector Shutdown Limit` (Temp4) | shutdown temperature set in L-Connect 3 (default 70) |
 
-Unplugged probes, missing hubs and a stopped bridge read **0**. It runs alongside L-Connect 3 and never sends fan, RGB or
+Unplugged probes, missing hubs and a stopped bridge read **0**. The limits are read from L-Connect 3's settings in
+`%ProgramData%\Lian-Li\L-Connect 3\device` every 10 seconds, so changes made in L-Connect show up automatically; use
+`--warning-temp` / `--shutdown-temp` to override them. It runs alongside L-Connect 3 and never sends fan, RGB or
 firmware commands.
 
 ## Build
@@ -58,6 +62,8 @@ like any other HWiNFO value.
 --no-registry         Do not write to the registry (with --once)
 --remove              Delete the HWiNFO custom sensor from the registry and exit
 --log <file>          Append log lines to a file
+--warning-temp <C>    Override the warning limit (default: L-Connect 3 setting, else 60)
+--shutdown-temp <C>   Override the shutdown limit (default: L-Connect 3 setting, else 70)
 --verbose             Log every reading
 --dump                With --once, print every raw HID input report received
 ```

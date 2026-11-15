@@ -9,7 +9,7 @@ Name=Volt Sleek Meters Universal 12V Conn Ring Smoke
 EnvVars=
 RefreshPeriod=500
 LockUserSettings=1
-EmbeddedImage=volt_sleek_meters_universal_12v_conn_ring_smoke_atlas.png
+EmbeddedImage=volt_smu_12v_conn_ring_smoke_atlas.png
 PingAddr=127.0.0.1
 [General]
 Sources=27
@@ -551,7 +551,7 @@ ExtentOrigin=0
 TextColor=30D158
 [Layer35]
 Name=Conn ring
-Text=<AI=Conn pct,0,0,0,104,0,1000,67,67,26,15,0>
+Text=<AI=Conn pct,0,0,0,102,0,94,67,67,51,15,0>
 PositionX=2680
 PositionY=37
 ExtentX=67
@@ -576,7 +576,7 @@ ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=66
-TextColor=FF453A,,11.75,FF453A,11.75,11.85,FF9F0A,11.85,11.95,30D158,11.95,(12V status,2)
+TextColor=0A84FF
 [Layer38]
 Name=Conn Case label
 Text=Case

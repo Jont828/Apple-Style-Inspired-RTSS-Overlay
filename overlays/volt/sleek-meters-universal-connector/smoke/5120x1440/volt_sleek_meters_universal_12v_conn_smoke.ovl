@@ -9,7 +9,7 @@ Name=Volt Sleek Meters Universal 12V Conn Smoke
 EnvVars=
 RefreshPeriod=500
 LockUserSettings=1
-EmbeddedImage=volt_sleek_meters_universal_12v_conn_smoke_atlas.png
+EmbeddedImage=volt_smu_12v_conn_smoke_atlas.png
 PingAddr=127.0.0.1
 [General]
 Sources=27

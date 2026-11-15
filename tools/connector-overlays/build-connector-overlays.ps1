@@ -6,10 +6,17 @@ Builds the 12V connector variants of Volt Sleek Meters Universal from an install
 Reads a Volt Sleek Meters Universal .ovl and its atlas (by default the Smoke theme from the RTSS
 Overlays folder) and writes these copies, each with its own atlas:
 
-  volt_sleek_meters_universal_conn_smoke          CONN section to the right of 12V
   volt_sleek_meters_universal_12v_conn_smoke      12V + connector merged into "12V Connector", left of FPS
   volt_sleek_meters_universal_12v_conn_bar_smoke  FPS-style: big connector temp, headroom bar, side stats
   volt_sleek_meters_universal_12v_conn_ring_smoke CPU/GPU-style: headroom ring with temp, side stats
+
+(volt_sleek_meters_universal_conn_smoke, the CONN section to the right of 12V, is not generated here.)
+
+Like the CONN layout, each atlas is a copy of the source atlas with only the panel strip rebuilt; the
+bar and ring reuse the existing 12V bar and CPU ring frames.
+
+The atlases use short "volt_smu_*" names: OverlayEditor passes "Plugins\Client\Overlays\<atlas>" to RTSS, and
+at 76+ characters RTSS no longer loads the image and draws font glyphs instead of the panel.
 
 The connector values come from the HWiNFO custom sensor published by tools\edge-hub-hwinfo-bridge
 ("Lian Li Edge Hub"). The temperature blends from white to amber at the L-Connect warning limit and to red halfway
@@ -26,16 +33,16 @@ Add-Type -AssemblyName System.Drawing
 $Enc = [System.Text.Encoding]::GetEncoding(1252)
 $Deg = [char]0xB0
 $ScreenCenter = 2560
-$Green = [System.Drawing.Color]::FromArgb(0x30, 0xD1, 0x58)
 # Same blended white -> amber -> red ramp as the CPU/GPU temperatures, driven by "Conn heat".
 $ConnHeatColor = "FFFFFF,,0,FF9F0A,0,1,FF453A,1,(Conn heat,1)"
+# Longest atlas path known to load ("Plugins\Client\Overlays\volt_sleek_meters_universal_conn_smoke_atlas.png").
+$MaxAtlasPath = 72
 
 # Source panel geometry (panel-local x).
 $SrcPanelW = 859; $PanelH = 92
 $SrcFpsX = 606; $SrcDivider = 769
-$SrcRingY = 94   # blue CPU ring frames: 67x67, 51 frames (2% steps), 15 per row
-$GreenRingY = 1000; $GreenRingFrames = 26   # 4% steps, two rows below the purple bar frames
-$CableBar = '0,1022,64,32,51,16,0'
+$CpuRing = '0,94,67,67,51,15,0'   # CPU usage ring frames
+$CableBar = '0,1022,64,32,51,16,0'   # 12V meter frames
 
 function Read-Ovl([string]$path) {
     $sections = New-Object System.Collections.ArrayList
@@ -125,13 +132,8 @@ function Set-Positions($ovl, [int]$newPanelW, [int]$fpsLocalX) {
     $newX0
 }
 
-# Copies the source atlas, rebuilds the panel at $panelW with dividers centred at $dividers and, if
-# requested, adds a green ring. Returns the Y of the green ring frames.
-# The atlas must keep the source size: RTSS packs it into the font texture, and a taller atlas overflows it
-# (the overlay then shows font glyphs instead of the panel). The green ring therefore replaces the green 12V
-# bar frames (only valid for layouts that don't use the 12V meter) and uses every other ring frame
-# ($GreenRingFrames frames, 15 per row).
-function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$dividers, [bool]$greenRing) {
+# Copies the source atlas and rebuilds only the panel strip at $panelW with dividers centred at $dividers.
+function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$dividers) {
     $src = [System.Drawing.Bitmap]::FromFile($srcPng)
     $dst = New-Object System.Drawing.Bitmap($src.Width, $src.Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($dst)
@@ -149,41 +151,20 @@ function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$div
             $dst.SetPixel($x, $y, $(if ($sx -lt 0) { [System.Drawing.Color]::Transparent } else { $src.GetPixel($sx, $y) }))
         }
     }
-    $ringY = $null
-    if ($greenRing) {
-        $ringY = $GreenRingY
-        for ($y = $ringY; $y -lt $src.Height; $y++) {
-            for ($x = 0; $x -lt $src.Width; $x++) { $dst.SetPixel($x, $y, [System.Drawing.Color]::Transparent) }
-        }
-        for ($k = 0; $k -lt $GreenRingFrames; $k++) {
-            $srcFrame = 2 * $k
-            $sx0 = ($srcFrame % 15) * 67; $sy0 = $SrcRingY + [Math]::Floor($srcFrame / 15) * 67
-            $dx0 = ($k % 15) * 67; $dy0 = $ringY + [Math]::Floor($k / 15) * 67
-            for ($y = 0; $y -lt 67; $y++) {
-                for ($x = 0; $x -lt 67; $x++) {
-                    $c = $src.GetPixel($sx0 + $x, $sy0 + $y)
-                    if ($c.A -eq 0) { continue }
-                    # The white track has B - R = 0 and is kept; the blue arc is blended to green.
-                    $t = [Math]::Max(0.0, [Math]::Min(1.0, ($c.B - $c.R) / 243.0))
-                    $r = [int]($c.R * (1 - $t) + $Green.R * $t); $gg = [int]($c.G * (1 - $t) + $Green.G * $t); $b = [int]($c.B * (1 - $t) + $Green.B * $t)
-                    $dst.SetPixel($dx0 + $x, $dy0 + $y, [System.Drawing.Color]::FromArgb($c.A, $r, $gg, $b))
-                }
-            }
-        }
-    }
     $src.Dispose()
     $dst.Save($dstPng, [System.Drawing.Imaging.ImageFormat]::Png)
     $dst.Dispose()
-    $ringY
 }
 
 function New-Variant([string]$suffix, [string]$displayName, [scriptblock]$build) {
     $base = "volt_sleek_meters_universal_${suffix}_$Theme"
+    $atlas = "volt_smu_${suffix}_${Theme}_atlas.png"
+    if (("Plugins\Client\Overlays\" + $atlas).Length -gt $MaxAtlasPath) { throw "Atlas name $atlas is too long for RTSS" }
     $ovl = Read-Ovl $SourceOvl
     $settings = ($ovl.Head | Where-Object Name -eq 'Settings').Props
     $settings['Name'] = "Volt Sleek Meters Universal $displayName " + (Get-Culture).TextInfo.ToTitleCase($Theme)
-    $settings['EmbeddedImage'] = "${base}_atlas.png"
-    [void](& $build $ovl (Join-Path $OutDir "${base}_atlas.png"))
+    $settings['EmbeddedImage'] = $atlas
+    [void](& $build $ovl (Join-Path $OutDir $atlas))
     Write-Ovl $ovl (Join-Path $OutDir "$base.ovl")
     "Wrote $base"
 }
@@ -193,19 +174,7 @@ $OutDir = (Resolve-Path $OutDir).Path
 $srcSettings = ((Read-Ovl $SourceOvl).Head | Where-Object Name -eq 'Settings').Props
 $SrcPng = Join-Path (Split-Path $SourceOvl) $srcSettings['EmbeddedImage']
 
-# 1) CONN section to the right of 12V.
-New-Variant 'conn' 'Conn' {
-    param($ovl, $png)
-    $w = 955; $s = 881
-    Add-ConnectorSources $ovl $false
-    $x0 = Set-Positions $ovl $w $SrcFpsX
-    [void]$ovl.Layers.Add((New-Layer 'CONN label' 'CONN' ($x0 + $s) 36 60 13 4 66 '64D2FF'))
-    [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" ($x0 + $s + 3) 56 60 32 4 150 $ConnHeatColor))
-    [void]$ovl.Layers.Add((New-Layer 'CONN sub' "Case %Case temp%$Deg" ($x0 + $s + 2) 92 60 13 4 60 'E5E5EA'))
-    Build-Atlas $SrcPng $png $w @(296, 594, $SrcDivider, 865) $false
-}
-
-# 2) "12V Connector": voltage + meter and connector temp in one section, left of FPS.
+# 1) "12V Connector": voltage + meter and connector temp in one section, left of FPS.
 New-Variant '12v_conn' '12V Conn' {
     param($ovl, $png)
     $s = 610; $divider = 752; $fps = 764; $w = 932
@@ -216,7 +185,7 @@ New-Variant '12v_conn' '12V Conn' {
     (Get-Layer $ovl 'Cable label')['Text'] = '12V Connector'
     [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" ($x0 + $s + 84) 56 0 0 0 105 $ConnHeatColor))
     [void]$ovl.Layers.Add((New-Layer 'CONN sub' "Case %Case temp%$Deg" ($x0 + $s + 85) 80 0 0 0 60 'E5E5EA'))
-    Build-Atlas $SrcPng $png $w @(296, 594, $divider) $false
+    Build-Atlas $SrcPng $png $w @(296, 594, $divider)
 }
 
 # 3a) FPS-style: big connector temp with a headroom bar underneath, secondary stats on the right.
@@ -235,7 +204,7 @@ New-Variant '12v_conn_bar' '12V Conn Bar' {
     Add-Row $ovl 'Case' "%Case temp%$Deg" ($x + 84) 36 92
     Add-Row $ovl '12V' '%12V cable% V' ($x + 84) 58 92
     Add-Row $ovl 'Shutdown' "%Conn shutdown%$Deg" ($x + 84) 80 92
-    Build-Atlas $SrcPng $png $w @(296, 594, $divider) $false
+    Build-Atlas $SrcPng $png $w @(296, 594, $divider)
 }
 
 # 3b) CPU/GPU-style: headroom ring with the connector temp inside, title and secondary stats on the right.
@@ -243,16 +212,16 @@ New-Variant '12v_conn_ring' '12V Conn Ring' {
     param($ovl, $png)
     $s = 610; $divider = 801; $fps = 813; $w = 981
     Add-ConnectorSources $ovl $true
-    $titleColor = (Get-Layer $ovl 'Cable label')['TextColor']
+    $titleColor = ($ovl.Layers | Where-Object { $_['Text'] -eq 'CPU' } | Select-Object -First 1)['TextColor']   # matches the CPU ring
     Remove-Layers $ovl 'Cable label', 'Cable voltage', 'Cable V', 'Cable meter'
     Remove-Source $ovl '12V pct'
     $x0 = Set-Positions $ovl $w $fps
     $x = $x0 + $s
-    $ringY = Build-Atlas $SrcPng $png $w @(296, 594, $divider) $true
-    [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn pct,0,0,0,$(4 * $GreenRingFrames),0,$ringY,67,67,$GreenRingFrames,15,0>" $x 37 67 67 0))
+    [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn pct,0,0,0,102,$CpuRing>" $x 37 67 67 0))
     [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" $x 37 67 67 4 86 $ConnHeatColor))
     [void]$ovl.Layers.Add((New-Layer 'Conn title' '12V Connector' ($x + 79) 36 0 0 0 66 $titleColor))
     Add-Row $ovl 'Case' "%Case temp%$Deg" ($x + 79) 55 100
     Add-Row $ovl '12V' '%12V cable% V' ($x + 79) 72 100
     Add-Row $ovl 'Shutdown' "%Conn shutdown%$Deg" ($x + 79) 89 100
+    Build-Atlas $SrcPng $png $w @(296, 594, $divider)
 }

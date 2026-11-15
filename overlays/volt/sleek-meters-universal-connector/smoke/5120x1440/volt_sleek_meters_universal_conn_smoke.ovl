@@ -12,7 +12,7 @@ LockUserSettings=1
 EmbeddedImage=volt_sleek_meters_universal_conn_smoke_atlas.png
 PingAddr=127.0.0.1
 [General]
-Sources=27
+Sources=24
 Tables=0
 Layers=42
 [Source0]
@@ -187,7 +187,7 @@ SensorInst=0
 ReadingType=1
 ReadingName=GPU 1 Connector
 [Source23]
-Name=Case temp
+Name=Hub temp
 Units=°C
 Format=%.0f
 Formula=
@@ -195,31 +195,6 @@ Provider=HwInfo
 SensorInst=0
 ReadingType=1
 ReadingName=Hub Ambient
-[Source24]
-Name=Conn warning
-Units=°C
-Format=%.0f
-Formula=
-Provider=HwInfo
-SensorInst=0
-ReadingType=1
-ReadingName=Connector Warning Limit
-[Source25]
-Name=Conn shutdown
-Units=°C
-Format=%.0f
-Formula=
-Provider=HwInfo
-SensorInst=0
-ReadingType=1
-ReadingName=Connector Shutdown Limit
-[Source26]
-Name=Conn heat
-Units=
-Format=%.0f
-Formula=("GPU conn temp" - "Conn warning") * 2 / ("Conn shutdown" - "Conn warning")
-Provider=HAL
-ID=Stub
 [Layer0]
 Name=Panel
 Text=<I=0,0,0,0,955,92>
@@ -598,7 +573,7 @@ ExtentX=60
 ExtentY=13
 ExtentOrigin=4
 Size=66
-TextColor=64D2FF
+TextColor=30D158
 [Layer40]
 Name=CONN temperature
 Text=%GPU conn temp%°
@@ -608,10 +583,10 @@ ExtentX=60
 ExtentY=32
 ExtentOrigin=4
 Size=150
-TextColor=FFFFFF,,0,FF9F0A,0,1,FF453A,1,(Conn heat,1)
+TextColor=FFFFFF,,65,FF9F0A,65,80,FF453A,80,(GPU conn temp,1)
 [Layer41]
 Name=CONN sub
-Text=Case %Case temp%°
+Text=Hub %Hub temp%°
 PositionX=2966
 PositionY=92
 ExtentX=60

@@ -12,9 +12,9 @@ LockUserSettings=1
 EmbeddedImage=volt_smu_12v_conn_smoke_atlas.png
 PingAddr=127.0.0.1
 [General]
-Sources=27
+Sources=29
 Tables=0
-Layers=41
+Layers=47
 [Source0]
 Name=CPU temperature
 Units=°C
@@ -187,7 +187,7 @@ SensorInst=0
 ReadingType=1
 ReadingName=GPU 1 Connector
 [Source23]
-Name=Case temp
+Name=Ambient temp
 Units=°C
 Format=%.0f
 Formula=
@@ -217,395 +217,469 @@ ReadingName=Connector Shutdown Limit
 Name=Conn heat
 Units=
 Format=%.0f
-Formula=("GPU conn temp" - "Conn warning") * 2 / ("Conn shutdown" - "Conn warning")
-Provider=HAL
-ID=Stub
+Formula=(x - "Conn warning") * 2 / ("Conn shutdown" - "Conn warning")
+Provider=HwInfo
+SensorInst=0
+ReadingType=1
+ReadingName=GPU 1 Connector
+[Source27]
+Name=Conn pct
+Units=%
+Format=%.0f
+Formula=x * 100 / "Conn shutdown"
+Provider=HwInfo
+SensorInst=0
+ReadingType=1
+ReadingName=GPU 1 Connector
+[Source28]
+Name=Ambient pct
+Units=%
+Format=%.0f
+Formula=x * 100 / "Conn warning"
+Provider=HwInfo
+SensorInst=0
+ReadingType=1
+ReadingName=Hub Ambient
 [Layer0]
 Name=Panel
-Text=<I=0,0,0,0,932,92>
-PositionX=2094
+Text=<I=0,0,0,0,616,92>
+PositionX=2040
 PositionY=24
-ExtentX=932
+ExtentX=616
 ExtentY=92
 ExtentOrigin=0
 [Layer1]
+Name=Panel tail
+Text=<I=0,0,600,0,424,92>
+PositionX=2656
+PositionY=24
+ExtentX=424
+ExtentY=92
+ExtentOrigin=0
+[Layer2]
 Name=CPU ring
 Text=<AI=CPU usage,0,0,0,102,0,94,67,67,51,15,0>
-PositionX=2107
+PositionX=2053
 PositionY=37
 ExtentX=67
 ExtentY=67
 ExtentOrigin=0
-[Layer2]
+[Layer3]
 Name=CPU usage
 Text=%CPU usage%
-PositionX=2107
+PositionX=2053
 PositionY=37
 ExtentX=67
 ExtentY=67
 ExtentOrigin=4
 Size=86
 TextColor=FFFFFF
-[Layer3]
+[Layer4]
 Name=CPU label
 Text=CPU
-PositionX=2185
+PositionX=2131
 PositionY=36
 ExtentX=60
 ExtentY=13
 ExtentOrigin=4
 Size=66
 TextColor=0A84FF
-[Layer4]
+[Layer5]
 Name=CPU temperature
 Text=%CPU temperature%°
-PositionX=2188
+PositionX=2134
 PositionY=56
 ExtentX=60
 ExtentY=32
 ExtentOrigin=4
 Size=150
 TextColor=FFFFFF,,75,FF9F0A,75,85,FF453A,85,(CPU temperature,1)
-[Layer5]
+[Layer6]
 Name=CPU Power label
 Text=Power
-PositionX=2274
+PositionX=2220
 PositionY=38
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer6]
+[Layer7]
 Name=CPU Power
 Text=%CPU power% W
-PositionX=2274
+PositionX=2220
 PositionY=36
 ExtentX=104
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer7]
+[Layer8]
 Name=CPU Power meter
 Text=<AI=CPU power pct,0,0,0,102,0,634,104,32,51,9,0>
-PositionX=2274
+PositionX=2220
 PositionY=54
 ExtentX=104
 ExtentY=32
 ExtentOrigin=0
-[Layer8]
+[Layer9]
 Name=CPU Clock label
 Text=Clock
-PositionX=2274
+PositionX=2220
 PositionY=60
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer9]
+[Layer10]
 Name=CPU Clock
 Text=%CPU clock% GHz
-PositionX=2274
+PositionX=2220
 PositionY=58
 ExtentX=104
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer10]
+[Layer11]
 Name=CPU Clock meter
 Text=<AI=CPU clock pct,0,0,0,102,0,634,104,32,51,9,0>
-PositionX=2274
+PositionX=2220
 PositionY=76
 ExtentX=104
 ExtentY=32
 ExtentOrigin=0
-[Layer11]
+[Layer12]
 Name=CPU RAM label
 Text=RAM
-PositionX=2274
+PositionX=2220
 PositionY=82
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer12]
+[Layer13]
 Name=CPU RAM
 Text=%RAM usage% GB
-PositionX=2274
+PositionX=2220
 PositionY=80
 ExtentX=104
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer13]
+[Layer14]
 Name=CPU RAM meter
 Text=<AI=RAM pct,0,0,0,102,0,634,104,32,51,9,0>
-PositionX=2274
+PositionX=2220
 PositionY=98
 ExtentX=104
 ExtentY=32
 ExtentOrigin=0
-[Layer14]
+[Layer15]
 Name=GPU ring
 Text=<AI=GPU1 usage,0,0,0,102,0,364,67,67,51,15,0>
-PositionX=2403
+PositionX=2349
 PositionY=37
 ExtentX=67
 ExtentY=67
 ExtentOrigin=0
-[Layer15]
+[Layer16]
 Name=GPU usage
 Text=%GPU1 usage%
-PositionX=2403
+PositionX=2349
 PositionY=37
 ExtentX=67
 ExtentY=67
 ExtentOrigin=4
 Size=86
 TextColor=FFFFFF
-[Layer16]
+[Layer17]
 Name=GPU label
 Text=GPU
-PositionX=2481
+PositionX=2427
 PositionY=36
 ExtentX=60
 ExtentY=13
 ExtentOrigin=4
 Size=66
 TextColor=BF5AF2
-[Layer17]
+[Layer18]
 Name=GPU temperature
 Text=%GPU1 temperature%°
-PositionX=2484
+PositionX=2430
 PositionY=56
 ExtentX=60
 ExtentY=32
 ExtentOrigin=4
 Size=150
 TextColor=FFFFFF,,75,FF9F0A,75,85,FF453A,85,(GPU1 temperature,1)
-[Layer18]
+[Layer19]
 Name=GPU sub
 Text=VRAM %GPU mem temp%°
-PositionX=2483
+PositionX=2429
 PositionY=92
 ExtentX=60
 ExtentY=13
 ExtentOrigin=4
 Size=60
 TextColor=E5E5EA
-[Layer19]
+[Layer20]
 Name=GPU Power label
 Text=Power
-PositionX=2570
+PositionX=2516
 PositionY=38
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer20]
+[Layer21]
 Name=GPU Power
 Text=%GPU1 power% W
-PositionX=2570
+PositionX=2516
 PositionY=36
 ExtentX=104
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer21]
+[Layer22]
 Name=GPU Power meter
 Text=<AI=GPU power pct,0,0,0,102,0,828,104,32,51,9,0>
-PositionX=2570
+PositionX=2516
 PositionY=54
 ExtentX=104
 ExtentY=32
 ExtentOrigin=0
-[Layer22]
+[Layer23]
 Name=GPU Clock label
 Text=Clock
-PositionX=2570
+PositionX=2516
 PositionY=60
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer23]
+[Layer24]
 Name=GPU Clock
 Text=%GPU clock% GHz
-PositionX=2570
+PositionX=2516
 PositionY=58
 ExtentX=104
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer24]
+[Layer25]
 Name=GPU Clock meter
 Text=<AI=GPU clock pct,0,0,0,102,0,828,104,32,51,9,0>
-PositionX=2570
+PositionX=2516
 PositionY=76
 ExtentX=104
 ExtentY=32
 ExtentOrigin=0
-[Layer25]
+[Layer26]
 Name=GPU VRAM label
 Text=VRAM
-PositionX=2570
+PositionX=2516
 PositionY=82
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer26]
+[Layer27]
 Name=GPU VRAM
 Text=%GPU1 memory usage% GB
-PositionX=2570
+PositionX=2516
 PositionY=80
 ExtentX=104
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer27]
+[Layer28]
 Name=GPU VRAM meter
 Text=<AI=VRAM pct,0,0,0,102,0,828,104,32,51,9,0>
-PositionX=2570
+PositionX=2516
 PositionY=98
 ExtentX=104
 ExtentY=32
 ExtentOrigin=0
-[Layer28]
+[Layer29]
 Name=FPS label
 Text=FPS
-PositionX=2858
+PositionX=2912
 PositionY=36
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=66
 TextColor=30D158
-[Layer29]
+[Layer30]
 Name=FPS
 Text=%Framerate%
-PositionX=2858
+PositionX=2912
 PositionY=49
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=170
 TextColor=FFFFFF
-[Layer30]
+[Layer31]
 Name=1% label
 Text=1%
-PositionX=2942
+PositionX=2996
 PositionY=41
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer31]
+[Layer32]
 Name=1%
 Text=%Framerate 1% Low%
-PositionX=2942
+PositionX=2996
 PositionY=39
 ExtentX=70
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer32]
+[Layer33]
 Name=FT label
 Text=FT
-PositionX=2942
+PositionX=2996
 PositionY=60
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
 Size=58
 TextColor=E5E5EA
-[Layer33]
+[Layer34]
 Name=FT
 Text=<FT> ms
-PositionX=2942
+PositionX=2996
 PositionY=58
 ExtentX=70
 ExtentY=16
 ExtentOrigin=2
 Size=65
 TextColor=FFFFFF
-[Layer34]
+[Layer35]
 Name=Frametime graph
 Text=<G=Frametime,0,0,1,0,40,0>
-PositionX=2858
+PositionX=2912
 PositionY=88
 ExtentX=156
 ExtentY=16
 ExtentOrigin=0
 TextColor=30D158
-[Layer35]
-Name=Cable label
-Text=12V Connector
-PositionX=2704
-PositionY=37
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
+[Layer36]
+Name=Conn title
+Text=12V CONNECTOR
+PositionX=2650
+PositionY=36
+ExtentX=116
+ExtentY=13
+ExtentOrigin=4
 Size=66
 TextColor=FF453A,,11.75,FF453A,11.75,11.85,FF9F0A,11.85,11.95,30D158,11.95,(12V status,2)
-[Layer36]
-Name=Cable voltage
-Text=%12V cable%
-PositionX=2704
-PositionY=56
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-Size=105
-TextColor=FFFFFF
 [Layer37]
-Name=Cable V
-Text=V
-PositionX=2764
-PositionY=64
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-Size=60
-TextColor=E5E5EA
-[Layer38]
-Name=Cable meter
-Text=<AI=12V pct,0,0,0,102,0,1022,64,32,51,16,0>
-PositionX=2704
-PositionY=85
-ExtentX=64
-ExtentY=32
-ExtentOrigin=0
-[Layer39]
 Name=CONN temperature
 Text=%GPU conn temp%°
-PositionX=2788
+PositionX=2653
 PositionY=56
-ExtentX=0
-ExtentY=0
-ExtentOrigin=0
-Size=105
+ExtentX=116
+ExtentY=32
+ExtentOrigin=4
+Size=150
 TextColor=FFFFFF,,0,FF9F0A,0,1,FF453A,1,(Conn heat,1)
-[Layer40]
-Name=CONN sub
-Text=Case %Case temp%°
-PositionX=2789
-PositionY=80
+[Layer38]
+Name=Conn Ambient label
+Text=Ambient
+PositionX=2784
+PositionY=38
 ExtentX=0
 ExtentY=0
 ExtentOrigin=0
-Size=60
+Size=58
 TextColor=E5E5EA
+[Layer39]
+Name=Conn Ambient
+Text=%Ambient temp%°
+PositionX=2784
+PositionY=36
+ExtentX=104
+ExtentY=16
+ExtentOrigin=2
+Size=65
+TextColor=FFFFFF
+[Layer40]
+Name=Conn Ambient meter
+Text=<AI=Ambient pct,0,0,0,102,402,295,104,6,51,5,0>
+PositionX=2784
+PositionY=54
+ExtentX=104
+ExtentY=6
+ExtentOrigin=0
+[Layer41]
+Name=Conn 12V label
+Text=12V
+PositionX=2784
+PositionY=60
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=58
+TextColor=E5E5EA
+[Layer42]
+Name=Conn 12V
+Text=%12V cable% V
+PositionX=2784
+PositionY=58
+ExtentX=104
+ExtentY=16
+ExtentOrigin=2
+Size=65
+TextColor=FFFFFF
+[Layer43]
+Name=Conn 12V meter
+Text=<AI=12V pct,0,0,0,102,402,295,104,6,51,5,0>
+PositionX=2784
+PositionY=76
+ExtentX=104
+ExtentY=6
+ExtentOrigin=0
+[Layer44]
+Name=Conn Shutdown label
+Text=Shutdown
+PositionX=2784
+PositionY=82
+ExtentX=0
+ExtentY=0
+ExtentOrigin=0
+Size=58
+TextColor=E5E5EA
+[Layer45]
+Name=Conn Shutdown
+Text=%Conn shutdown%°
+PositionX=2784
+PositionY=80
+ExtentX=104
+ExtentY=16
+ExtentOrigin=2
+Size=65
+TextColor=FFFFFF
+[Layer46]
+Name=Conn Shutdown meter
+Text=<AI=Conn pct,0,0,0,102,402,295,104,6,51,5,0>
+PositionX=2784
+PositionY=98
+ExtentX=104
+ExtentY=6
+ExtentOrigin=0

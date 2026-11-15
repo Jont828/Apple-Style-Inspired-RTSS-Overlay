@@ -551,7 +551,7 @@ ExtentOrigin=0
 TextColor=30D158
 [Layer35]
 Name=Conn ring
-Text=<AI=Conn pct,0,0,0,102,0,1152,67,67,51,15,0>
+Text=<AI=Conn pct,0,0,0,104,0,1000,67,67,26,15,0>
 PositionX=2680
 PositionY=37
 ExtentX=67

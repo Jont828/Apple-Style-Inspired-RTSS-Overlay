@@ -33,7 +33,8 @@ $ConnHeatColor = "FFFFFF,,0,FF9F0A,0,1,FF453A,1,(Conn heat,1)"
 # Source panel geometry (panel-local x).
 $SrcPanelW = 859; $PanelH = 92
 $SrcFpsX = 606; $SrcDivider = 769
-$SrcRingY = 94   # blue CPU ring frames: 67x67, 51 frames, 15 per row
+$SrcRingY = 94   # blue CPU ring frames: 67x67, 51 frames (2% steps), 15 per row
+$GreenRingY = 1000; $GreenRingFrames = 26   # 4% steps, two rows below the purple bar frames
 $CableBar = '0,1022,64,32,51,16,0'
 
 function Read-Ovl([string]$path) {
@@ -125,12 +126,14 @@ function Set-Positions($ovl, [int]$newPanelW, [int]$fpsLocalX) {
 }
 
 # Copies the source atlas, rebuilds the panel at $panelW with dividers centred at $dividers and, if
-# requested, appends green copies of the CPU ring frames. Returns the Y of the green ring frames.
+# requested, adds a green ring. Returns the Y of the green ring frames.
+# The atlas must keep the source size: RTSS packs it into the font texture, and a taller atlas overflows it
+# (the overlay then shows font glyphs instead of the panel). The green ring therefore replaces the green 12V
+# bar frames (only valid for layouts that don't use the 12V meter) and uses every other ring frame
+# ($GreenRingFrames frames, 15 per row).
 function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$dividers, [bool]$greenRing) {
     $src = [System.Drawing.Bitmap]::FromFile($srcPng)
-    $ringH = 4 * 67
-    $h = if ($greenRing) { $src.Height + $ringH } else { $src.Height }
-    $dst = New-Object System.Drawing.Bitmap($src.Width, $h, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $dst = New-Object System.Drawing.Bitmap($src.Width, $src.Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($dst)
     $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
     $g.DrawImageUnscaled($src, 0, 0)
@@ -148,15 +151,23 @@ function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$div
     }
     $ringY = $null
     if ($greenRing) {
-        # The white track has B - R = 0 and is kept; the blue arc is blended to green.
-        $ringY = $src.Height
-        for ($y = 0; $y -lt $ringH; $y++) {
-            for ($x = 0; $x -lt $src.Width; $x++) {
-                $c = $src.GetPixel($x, $SrcRingY + $y)
-                if ($c.A -eq 0) { continue }
-                $t = [Math]::Max(0.0, [Math]::Min(1.0, ($c.B - $c.R) / 243.0))
-                $r = [int]($c.R * (1 - $t) + $Green.R * $t); $gg = [int]($c.G * (1 - $t) + $Green.G * $t); $b = [int]($c.B * (1 - $t) + $Green.B * $t)
-                $dst.SetPixel($x, $ringY + $y, [System.Drawing.Color]::FromArgb($c.A, $r, $gg, $b))
+        $ringY = $GreenRingY
+        for ($y = $ringY; $y -lt $src.Height; $y++) {
+            for ($x = 0; $x -lt $src.Width; $x++) { $dst.SetPixel($x, $y, [System.Drawing.Color]::Transparent) }
+        }
+        for ($k = 0; $k -lt $GreenRingFrames; $k++) {
+            $srcFrame = 2 * $k
+            $sx0 = ($srcFrame % 15) * 67; $sy0 = $SrcRingY + [Math]::Floor($srcFrame / 15) * 67
+            $dx0 = ($k % 15) * 67; $dy0 = $ringY + [Math]::Floor($k / 15) * 67
+            for ($y = 0; $y -lt 67; $y++) {
+                for ($x = 0; $x -lt 67; $x++) {
+                    $c = $src.GetPixel($sx0 + $x, $sy0 + $y)
+                    if ($c.A -eq 0) { continue }
+                    # The white track has B - R = 0 and is kept; the blue arc is blended to green.
+                    $t = [Math]::Max(0.0, [Math]::Min(1.0, ($c.B - $c.R) / 243.0))
+                    $r = [int]($c.R * (1 - $t) + $Green.R * $t); $gg = [int]($c.G * (1 - $t) + $Green.G * $t); $b = [int]($c.B * (1 - $t) + $Green.B * $t)
+                    $dst.SetPixel($dx0 + $x, $dy0 + $y, [System.Drawing.Color]::FromArgb($c.A, $r, $gg, $b))
+                }
             }
         }
     }
@@ -238,7 +249,7 @@ New-Variant '12v_conn_ring' '12V Conn Ring' {
     $x0 = Set-Positions $ovl $w $fps
     $x = $x0 + $s
     $ringY = Build-Atlas $SrcPng $png $w @(296, 594, $divider) $true
-    [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn pct,0,0,0,102,0,$ringY,67,67,51,15,0>" $x 37 67 67 0))
+    [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn pct,0,0,0,$(4 * $GreenRingFrames),0,$ringY,67,67,$GreenRingFrames,15,0>" $x 37 67 67 0))
     [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" $x 37 67 67 4 86 $ConnHeatColor))
     [void]$ovl.Layers.Add((New-Layer 'Conn title' '12V Connector' ($x + 79) 36 0 0 0 66 $titleColor))
     Add-Row $ovl 'Case' "%Case temp%$Deg" ($x + 79) 55 100

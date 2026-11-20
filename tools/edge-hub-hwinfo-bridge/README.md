@@ -20,6 +20,8 @@ Unplugged probes, missing hubs and a stopped bridge read **0**. The limits are r
 `--warning-temp` / `--shutdown-temp` to override them. It runs alongside L-Connect 3 and never sends fan, RGB or
 firmware commands.
 
+For step-by-step setup on a new machine (bridge, HWiNFO64 and RTSS), see [SETUP.md](SETUP.md).
+
 ## Build
 
 No SDK needed — uses the .NET Framework C# compiler that ships with Windows:

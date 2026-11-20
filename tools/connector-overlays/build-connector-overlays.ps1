@@ -9,6 +9,14 @@ Overlays folder) and writes these copies, each with its own atlas:
   volt_sleek_meters_universal_12v_conn_smoke      "12V-2x6" title over the connector temp, metered stats
   volt_sleek_meters_universal_12v_conn_bar_smoke  FPS-style: big connector temp, headroom bar, metered stats
   volt_sleek_meters_universal_12v_conn_ring_smoke CPU/GPU-style: headroom ring, title over temp, metered stats
+  volt_sleek_meters_universal_12v_conn_ring_power_smoke
+                                                  Ring layout, but the ring shows the GPU power (full at the
+                                                  connector's 600 W rating) with the wattage inside it, and the
+                                                  GPU Power stat is replaced by VRAM Temp
+  volt_sleek_meters_universal_12v_conn_thermometer_smoke
+                                                  Ring layout with a thermometer instead of the ring: it fills
+                                                  toward the shutdown limit and is green below the warning limit,
+                                                  yellow up to halfway to shutdown, then red
 
 Each section sits left of FPS and replaces the 12V section; the 12V voltage becomes one of the Ambient /
 12V / Shutdown secondary stats, which are stacked with a meter underneath like CPU Power / Clock / RAM.
@@ -65,9 +73,20 @@ $Old12VMeterY = 995   # the 12V meter frames are moved, then cleared from here d
 $RingY = 996; $RingFrames = 30
 $MeterX = 402; $MeterY = 295; $MeterH = 6; $MeterCols = 5   # bar line is the top 6 px of a meter frame
 $ShortMeterX = 402; $ShortMeterY = 565; $ShortMeterCols = 9
+# RTSS stretches an image shorter than its layer's text line height to that height, which turns the 3 px line of a
+# 6 px meter frame into a ~10 px block at the default size; a 25% font size keeps the line height under 6 px.
+$MeterSize = 25
 $ConnRing = "0,$RingY,$SrcRingSize,$SrcRingSize,$RingFrames,$SrcRingCols,0"
 $ConnMeter = "$MeterX,$MeterY,$SrcMeterW,$MeterH,$SrcMeterFrames,$MeterCols,0"
 $ConnShortMeter = "$ShortMeterX,$ShortMeterY,$Src12VMeterW,$MeterH,$SrcMeterFrames,$ShortMeterCols,0"
+# Thermometer frames take the ring's place in the thermometer atlas: $ThermoFrames fill levels for each colour band.
+$ThermoW = 22; $ThermoH = $SrcRingSize; $ThermoFrames = 30; $ThermoCols = [Math]::Floor($AtlasW / $ThermoW)
+$ThermoBands = @(
+    [System.Drawing.Color]::FromArgb(0x30, 0xD1, 0x58),   # green: below the warning limit
+    [System.Drawing.Color]::FromArgb(0xFF, 0xD6, 0x0A),   # yellow: warning limit to halfway to shutdown
+    [System.Drawing.Color]::FromArgb(0xFF, 0x45, 0x3A))   # red: past halfway to shutdown
+$ThermoBandMax = 102   # value range of one band, as for the rings
+$ConnThermo = "0,$RingY,$ThermoW,$ThermoH,$($ThermoFrames * $ThermoBands.Count),$ThermoCols,0"
 
 function Read-Ovl([string]$path) {
     $sections = New-Object System.Collections.ArrayList
@@ -119,7 +138,7 @@ function New-Layer([string]$name, [string]$text, [int]$x, [int]$y, [int]$ex = 0,
 function Add-Row($ovl, [string]$label, [string]$value, [string]$pctSource, [int]$x, [int]$y) {
     [void]$ovl.Layers.Add((New-Layer "Conn $label label" $label $x ($y + 2) 0 0 0 58 'E5E5EA'))
     [void]$ovl.Layers.Add((New-Layer "Conn $label" $value $x $y $SrcMeterW 16 2 65 'FFFFFF'))
-    [void]$ovl.Layers.Add((New-Layer "Conn $label meter" "<AI=$pctSource,0,0,0,102,$ConnMeter>" $x ($y + 18) $SrcMeterW $MeterH 0))
+    [void]$ovl.Layers.Add((New-Layer "Conn $label meter" "<AI=$pctSource,0,0,0,102,$ConnMeter>" $x ($y + 18) $SrcMeterW $MeterH 0 $MeterSize))
 }
 
 # Ambient / 12V / Shutdown rows at the CPU row positions.
@@ -132,6 +151,10 @@ function Add-Rows($ovl, [int]$x) {
 function Add-HwInfoSource($ovl, [string]$name, [string]$reading, [string]$units = "${Deg}C", [string]$formula = '') {
     [void]$ovl.Sources.Add([ordered]@{ Name = $name; Units = $units; Format = '%.0f'; Formula = $formula; Provider = 'HwInfo'
         SensorInst = 0; ReadingType = 1; ReadingName = $reading })
+}
+
+function Add-HalSource($ovl, [string]$name, [string]$id, [string]$units, [string]$formula) {
+    [void]$ovl.Sources.Add([ordered]@{ Name = $name; Units = $units; Format = '%.0f'; Formula = $formula; Provider = 'HAL'; ID = $id })
 }
 
 function Add-ConnectorSources($ovl) {
@@ -150,6 +173,17 @@ function Remove-12V($ovl) {
     $color = (Get-Layer $ovl 'Cable label')['TextColor']
     Remove-Layers $ovl 'Cable label', 'Cable voltage', 'Cable V', 'Cable meter'
     $color
+}
+
+# Turns the GPU section's Power stat into VRAM Temp (meter from "VRAM temp pct") and drops the VRAM temp under the
+# GPU temperature, which would repeat it.
+function Set-VramTempRow($ovl) {
+    $label = Get-Layer $ovl 'GPU Power label'; $value = Get-Layer $ovl 'GPU Power'; $meter = Get-Layer $ovl 'GPU Power meter'
+    if (-not ($label -and $value -and $meter -and $meter['Text'] -like '<AI=GPU power pct,*')) { throw 'Unexpected GPU Power stat' }
+    $label['Name'] = 'GPU VRAM temp label'; $label['Text'] = 'VRAM Temp'
+    $value['Name'] = 'GPU VRAM temp'; $value['Text'] = "%GPU mem temp%$Deg"
+    $meter['Name'] = 'GPU VRAM temp meter'; $meter['Text'] = $meter['Text'].Replace('<AI=GPU power pct,', '<AI=VRAM temp pct,')
+    Remove-Layers $ovl 'GPU sub'
 }
 
 # Re-centres the panel at its new width; FPS layers additionally move to $fpsLocalX. Returns the new panel X.
@@ -183,7 +217,8 @@ function Get-PanelHead([int]$panelW) {
 }
 
 # Copies the source atlas and rebuilds only the panel strip at $panelW with dividers centred at $dividers.
-function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$dividers) {
+# $frames, if given, is run on the finished atlas bitmap to add variant-specific frames.
+function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$dividers, [scriptblock]$frames = $null) {
     $src = [System.Drawing.Bitmap]::FromFile($srcPng)
     $dst = New-Object System.Drawing.Bitmap($src.Width, $src.Height, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($dst)
@@ -209,6 +244,7 @@ function Build-Atlas([string]$srcPng, [string]$dstPng, [int]$panelW, [int[]]$div
     }
     $src.Dispose()
     Add-ConnectorFrames $dst
+    if ($frames) { & $frames $dst }
     $dst.Save($dstPng, [System.Drawing.Imaging.ImageFormat]::Png)
     $dst.Dispose()
 }
@@ -248,6 +284,64 @@ function Add-ConnectorFrames($bmp) {
     }
 }
 
+# Anti-aliased coverage (0..1 per pixel) of the shapes $draw fills on a $w x $h canvas, rendered at 4x and averaged.
+function Get-Coverage([int]$w, [int]$h, [scriptblock]$draw) {
+    $ss = 4
+    $big = New-Object System.Drawing.Bitmap(($w * $ss), ($h * $ss), [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($big)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.ScaleTransform($ss, $ss)
+    & $draw $g ([System.Drawing.Brushes]::White)
+    $g.Dispose()
+    $data = $big.LockBits((New-Object System.Drawing.Rectangle(0, 0, $big.Width, $big.Height)),
+        [System.Drawing.Imaging.ImageLockMode]::ReadOnly, $big.PixelFormat)
+    $bytes = New-Object byte[] ($data.Stride * $big.Height)
+    [System.Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
+    $big.UnlockBits($data); $big.Dispose()
+    $cov = New-Object double[] ($w * $h)
+    for ($y = 0; $y -lt $h * $ss; $y++) {
+        $row = $y * $data.Stride; $o = [Math]::Floor($y / $ss) * $w
+        for ($x = 0; $x -lt $w * $ss; $x++) { $cov[$o + [Math]::Floor($x / $ss)] += $bytes[$row + $x * 4 + 3] }
+    }
+    for ($i = 0; $i -lt $cov.Length; $i++) { $cov[$i] /= 255 * $ss * $ss }
+    , $cov
+}
+
+# Replaces the ring frames with thermometers in the ring's track grey: a tube with a bulb, holding a narrower column
+# of liquid that rises from the bulb. Frame (band * $ThermoFrames + level) is drawn in that band's colour.
+function Add-ThermometerFrames($bmp) {
+    $rows = [Math]::Ceiling($ThermoFrames * $ThermoBands.Count / $ThermoCols)
+    if ($RingY + $rows * $ThermoH -gt $bmp.Height) { throw 'Thermometer frames do not fit in the atlas' }
+    for ($y = $RingY; $y -lt $bmp.Height; $y++) {
+        for ($x = 0; $x -lt $bmp.Width; $x++) { $bmp.SetPixel($x, $y, [System.Drawing.Color]::Transparent) }
+    }
+    $trackAlpha = 125 / 255   # same as the ring track
+    $bulbY = 56; $emptyTop = 49; $fullTop = 3   # bulb centre; liquid column top when empty and when full
+    $track = Get-Coverage $ThermoW $ThermoH {
+        param($g, $b)
+        $g.FillEllipse($b, 1, ($bulbY - 10), 20, 20); $g.FillEllipse($b, 6, 1, 10, 10); $g.FillRectangle($b, 6, 6, 10, ($bulbY - 6))
+    }
+    for ($k = 0; $k -lt $ThermoFrames; $k++) {
+        $top = $emptyTop + ($fullTop - $emptyTop) * $k / ($ThermoFrames - 1)
+        $liquid = Get-Coverage $ThermoW $ThermoH {
+            param($g, $b)
+            $g.FillEllipse($b, 4, ($bulbY - 7), 14, 14); $g.FillEllipse($b, 8, $top, 6, 6)
+            $g.FillRectangle($b, 8, ($top + 3), 6, ($bulbY - $top - 3))
+        }
+        for ($band = 0; $band -lt $ThermoBands.Count; $band++) {
+            $c = $ThermoBands[$band]; $i = $band * $ThermoFrames + $k
+            $dx = ($i % $ThermoCols) * $ThermoW; $dy = $RingY + [Math]::Floor($i / $ThermoCols) * $ThermoH
+            for ($p = 0; $p -lt $track.Length; $p++) {
+                $l = $liquid[$p]; $t = $track[$p] * $trackAlpha * (1 - $l); $a = $l + $t
+                if ($a -le 0) { continue }
+                $bmp.SetPixel($dx + $p % $ThermoW, $dy + [Math]::Floor($p / $ThermoW), [System.Drawing.Color]::FromArgb(
+                    [int][Math]::Round(255 * $a), [int][Math]::Round(($c.R * $l + 255 * $t) / $a),
+                    [int][Math]::Round(($c.G * $l + 255 * $t) / $a), [int][Math]::Round(($c.B * $l + 255 * $t) / $a)))
+            }
+        }
+    }
+}
+
 function New-Variant([string]$suffix, [string]$displayName, [scriptblock]$build) {
     $base = "volt_sleek_meters_universal_${suffix}_$Theme"
     $atlas = "volt_smu_${suffix}_${Theme}_atlas.png"
@@ -267,11 +361,11 @@ $srcSettings = ((Read-Ovl $SourceOvl).Head | Where-Object Name -eq 'Settings').P
 $SrcPng = Join-Path (Split-Path $SourceOvl) $srcSettings['EmbeddedImage']
 
 # Places a connector section of width $cw at panel-local $s, left of FPS. Returns its screen x.
-function Set-Section($ovl, [string]$png, [int]$s, [int]$cw) {
+function Set-Section($ovl, [string]$png, [int]$s, [int]$cw, [scriptblock]$frames = $null) {
     $divider = $s + $cw + 12
     $w = $divider + 12 + $FpsTail
     $x0 = Set-Positions $ovl $w ($divider + 12)
-    Build-Atlas $SrcPng $png $w @(296, 594, $divider)
+    Build-Atlas $SrcPng $png $w @(296, 594, $divider) $frames
     $x0 + $s
 }
 
@@ -303,7 +397,7 @@ New-Variant '12v_conn_bar' '12V Conn Bar' {
     $x = Set-Section $ovl $png $ConnStart ($FpsGap + $SrcMeterW)
     [void]$ovl.Layers.Add((New-Layer 'Conn title' $Title $x 36 0 0 0 66 $color))
     [void]$ovl.Layers.Add((New-Layer 'CONN temperature' "%GPU conn temp%$Deg" $x 49 0 0 0 170 $ConnHeatColor))
-    [void]$ovl.Layers.Add((New-Layer 'Conn meter' "<AI=Conn pct,0,0,0,102,$ConnShortMeter>" $x 98 $Src12VMeterW $MeterH 0))
+    [void]$ovl.Layers.Add((New-Layer 'Conn meter' "<AI=Conn pct,0,0,0,102,$ConnShortMeter>" $x 98 $Src12VMeterW $MeterH 0 $MeterSize))
     Add-Rows $ovl ($x + $FpsGap)
 }
 
@@ -315,6 +409,44 @@ New-Variant '12v_conn_ring' '12V Conn Ring' {
     $col = $SrcRingSize + 11
     $x = Set-Section $ovl $png $ConnStart ($col + $TitleW + $Gap + $SrcMeterW)
     [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn pct,0,0,0,102,$ConnRing>" $x 37 $SrcRingSize $SrcRingSize 0))
+    Add-TitleColumn $ovl ($x + $col) $color
+    Add-Rows $ovl ($x + $col + $TitleW + $Gap)
+}
+
+# 4) Ring layout with the ring showing GPU power against the connector's 600 W rating and the wattage inside it; the
+#    GPU section's Power stat becomes VRAM Temp (and the VRAM temp under the GPU temperature goes, as it would repeat).
+New-Variant '12v_conn_ring_power' '12V Conn Ring Power' {
+    param($ovl, $png)
+    Add-ConnectorSources $ovl
+    Add-HalSource $ovl 'Conn power pct' 'GPU1 power' '%' 'x / 6'
+    Add-HalSource $ovl 'VRAM temp pct' 'GPU1 memory temperature' '%' 'x / 1.1'   # full at 110 C
+    $color = Remove-12V $ovl
+    Set-VramTempRow $ovl
+    $col = $SrcRingSize + 11
+    $x = Set-Section $ovl $png $ConnStart ($col + $TitleW + $Gap + $SrcMeterW)
+    [void]$ovl.Layers.Add((New-Layer 'Conn ring' "<AI=Conn power pct,0,0,0,102,$ConnRing>" $x 37 $SrcRingSize $SrcRingSize 0))
+    # Wattage centred a little high, like the CPU/GPU usage, with a small unit underneath.
+    [void]$ovl.Layers.Add((New-Layer 'Conn power' '%GPU1 power%' $x 37 $SrcRingSize 60 4 86 'FFFFFF'))
+    [void]$ovl.Layers.Add((New-Layer 'Conn power unit' 'W' $x 80 $SrcRingSize 13 4 58 'E5E5EA'))
+    Add-TitleColumn $ovl ($x + $col) $color
+    Add-Rows $ovl ($x + $col + $TitleW + $Gap)
+}
+
+# 5) Ring layout with a thermometer in place of the ring. "Conn thermo" picks the frame: the band (0 green, 1 yellow,
+#    2 red, switching at the warning limit and halfway to shutdown, like the temperature colour) times
+#    $ThermoBandMax, plus the fill toward the shutdown limit (capped at 100%), plus 1 so a band's first and last
+#    levels never round into the neighbouring band.
+New-Variant '12v_conn_thermometer' '12V Conn Thermometer' {
+    param($ovl, $png)
+    Add-ConnectorSources $ovl
+    $band = '((x > "Conn warning") + (x > ("Conn warning" + "Conn shutdown") / 2))'
+    $fill = '100 * (x - (x - "Conn shutdown") * (x > "Conn shutdown")) / "Conn shutdown"'
+    Add-HwInfoSource $ovl 'Conn thermo' 'GPU 1 Connector' '' "$ThermoBandMax * $band + $fill + 1"
+    $color = Remove-12V $ovl
+    $col = $ThermoW + 11
+    $x = Set-Section $ovl $png $ConnStart ($col + $TitleW + $Gap + $SrcMeterW) { param($bmp) Add-ThermometerFrames $bmp }
+    $max = $ThermoBandMax * $ThermoBands.Count
+    [void]$ovl.Layers.Add((New-Layer 'Conn thermometer' "<AI=Conn thermo,0,0,0,$max,$ConnThermo>" $x 37 $ThermoW $ThermoH 0))
     Add-TitleColumn $ovl ($x + $col) $color
     Add-Rows $ovl ($x + $col + $TitleW + $Gap)
 }

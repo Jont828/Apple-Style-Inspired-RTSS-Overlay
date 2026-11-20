@@ -599,6 +599,7 @@ PositionY=98
 ExtentX=64
 ExtentY=6
 ExtentOrigin=0
+Size=25
 [Layer38]
 Name=Conn Ambient label
 Text=Ambient
@@ -627,6 +628,7 @@ PositionY=54
 ExtentX=104
 ExtentY=6
 ExtentOrigin=0
+Size=25
 [Layer41]
 Name=Conn 12V label
 Text=12V
@@ -655,6 +657,7 @@ PositionY=76
 ExtentX=104
 ExtentY=6
 ExtentOrigin=0
+Size=25
 [Layer44]
 Name=Conn Shutdown label
 Text=Shutdown
@@ -683,3 +686,4 @@ PositionY=98
 ExtentX=104
 ExtentY=6
 ExtentOrigin=0
+Size=25
